@@ -57,7 +57,6 @@ function appointment_booking_create_tables() {
     $charset_collate = $wpdb->get_charset_collate();
 
     $booking_table = $wpdb->prefix . 'appointment_bookings';
-    $transaction_table = $wpdb->prefix . 'appointment_transactions';
 
     $sql = "
     CREATE TABLE $booking_table (
@@ -65,22 +64,17 @@ function appointment_booking_create_tables() {
         customer_name VARCHAR(255) NOT NULL,
         email VARCHAR(255) NOT NULL,
         phone VARCHAR(20) NOT NULL,
+        message TEXT NULL,
         date DATE NOT NULL,
         time TIME NOT NULL,
         ms_event_id VARCHAR(255) NULL,  -- Fixed NULLABLE issue
         duration INT(11) NOT NULL,
         amount DECIMAL(10,2) NOT NULL,
         status ENUM('pending', 'confirmed', 'rejected', 'cancelled') DEFAULT 'pending',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    ) $charset_collate ENGINE=InnoDB;
-
-    CREATE TABLE $transaction_table (
-        id BIGINT(20) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        booking_id BIGINT(20) UNSIGNED NOT NULL,
+        type ENUM('online', 'in person') DEFAULT 'online',
         payment_id VARCHAR(255) NOT NULL,
-        status ENUM('pending', 'paid', 'failed') DEFAULT 'pending',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT fk_booking FOREIGN KEY (booking_id) REFERENCES $booking_table(id) ON DELETE CASCADE
+        payment_status ENUM('pending', 'paid', 'failed', 'refunded') DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     ) $charset_collate ENGINE=InnoDB;
     ";
 
@@ -99,7 +93,7 @@ function update_booking_status() {
 
     global $wpdb;
     $booking_table = $wpdb->prefix . 'appointment_bookings';
-
+    
     $booking_id = intval($_POST['id']);
     $new_status = sanitize_text_field($_POST['status']);
 
@@ -138,63 +132,74 @@ function update_booking_status() {
     } elseif ($new_status === 'cancelled' && !empty($booking['ms_event_id'])) {
         delete_ms_calendar_event($booking['ms_event_id']);
     }
-
+    $booking = $wpdb->get_row($wpdb->prepare("
+            SELECT b.*
+            FROM $booking_table b
+            WHERE b.id = %d
+        ", $booking_id));
+        
     // Send email to the customer
-    send_booking_status_email($booking, $new_status);
+    send_booking_status_email($booking);
 
     wp_send_json_success(['message' => 'Booking status updated successfully.']);
 }
 
 
-function send_booking_status_email($booking, $status) {
+function send_booking_status_email($booking) {
     $to = $booking->email;
     $subject = "Your Appointment Status Update";
 
     // Base email message
-    $message = "Hello {$booking->customer_name},\n\n";
+    $message = "Hello {$booking->customer_name}, <br>";
     
-    switch ($status) {
+    $formatted_date = date_i18n('F j Y', strtotime($booking->date));
+    $formatted_time = date('g:ia', strtotime($booking->time));
+    $duration = formatMinutes($booking->duration);
+    
+    switch ($booking->status) {
+        case 'pending':
+            $message .= "Your appointment request on {$formatted_date} at {$formatted_time} has been received, you will be notified once your appointment is aproved.";
+            break;
         case 'confirmed':
-            $message .= "Your appointment on {$booking->date} at {$booking->time} has been confirmed.\n\n";
+            $message .= "Your appointment is all set for {$formatted_date} at {$formatted_time}. Looking forward to seeing you .";
             break;
         case 'rejected':
-            $message .= "Unfortunately, your appointment on {$booking->date} at {$booking->time} has been rejected.\n\n";
+            $message .= "Unfortunately, your appointment on {$formatted_date} at {$formatted_time} has been rejected. Please contact us for more info.";
             break;
         case 'cancelled':
-            $message .= "Your appointment on {$booking->date} at {$booking->time} has been cancelled.\n\n";
+            $message .= "Your appointment on {$formatted_date} at {$formatted_time} has been cancelled. If this was a mistake, please contact us immediately.";
             break;
         default:
             return;
     }
 
     // Add detailed booking information
-    $message .= "Here are your booking details:\n";
-    $message .= "-----------------------------------\n";
-    $message .= "📅 Date: {$booking->date}\n";
-    $message .= "🕒 Time: {$booking->time}\n";
-    $message .= "⏳ Duration: {$booking->duration} minutes\n";
-    $message .= "💰 Amount: $" . number_format($booking->amount, 2) . "\n";
-    $message .= "📌 Status: " . ucfirst($new_status) . "\n";
-    $message .= "📨 Message: " . strip_tags($booking->message) . "\n";
-    $message .= "🕗 Booking Created At: {$booking->created_at}\n";
-    $message .= "💳 Payment Status: " . (($booking->payment_status === 'paid') ? '✅ Paid' : '❌ Not Paid') . "\n";
+    $message .= "<p><strong>Booking Details</p>";
+    $message .= "<p><strong>Date:</strong> {$formatted_date}</p>";
+    $message .= "<p><strong>Time:</strong> {$formatted_time}</p>";
+    $message .= "<p><strong>Duration:</strong> {$duration}</p>";
+    $message .= "<p><strong>Type:</strong> {$booking->type}</p>";
+    $message .= "<p><strong>Amount:</strong> $" . number_format($booking->amount, 2) . "</p>";
+    $message .= "<p><strong>Payment Status: </strong>" . (($booking->payment_status === 'paid') ? 'Paid' : 'Not Paid') . "</p>";
 
     if (!empty($booking->payment_id)) {
-        $message .= "🔢 Transaction ID: {$booking->payment_id}\n";
-        $message .= "💳 Payment Method: " . ucfirst($booking->payment_method) . "\n";
+        $message .= "<p><strong>Transaction ID: {$booking->payment_id}</p>";
+        $message .= "<p><strong>Payment Method: Stripe payment </p>";
     } else {
-        $message .= "⚠️ No transaction details available\n";
+        $message .= "<p><strong>No transaction details available</p>";
     }
 
-    $message .= "-----------------------------------\n";
-    $message .= "Thank you for using our service!\n";
-    $message .= "📞 Contact us if you have any questions.\n";
+    $template_path = __DIR__ . '/email.html';
+    $template = file_exists($template_path) ? file_get_contents($template_path) : '{content}';
+    
+    // Replace placeholders
+    $template = str_replace(['{content}'], [$message], $template);
 
     // Email headers
-    $headers = ['Content-Type: text/plain; charset=UTF-8', 'From: Focz <noreply@focz.ca>'];
+    $headers = ['Content-Type: text/html; charset=UTF-8', 'From: Focz <noreply@focz.ca>'];
     
     // Send the email
-    wp_mail($to, $subject, $message, $headers);
+    wp_mail($to, $subject, $template, $headers);
 }
 
 
@@ -267,5 +272,64 @@ function delete_ms_calendar_event($event_id) {
     ]);
 
     return !is_wp_error($response);
+}
+
+
+function appointment_payment_success() {
+
+    global $wpdb;
+    
+    if(!$_GET['payment_success']){
+        return false;
+    }
+
+    $booking_id = isset($_GET['booking_id']) ? intval($_GET['booking_id']) : 0;
+    $session_id = isset($_GET['session_id']) ? sanitize_text_field($_GET['session_id']) : '';
+    $booking_table = $wpdb->prefix . 'appointment_bookings';
+    $booking = $wpdb->get_row($wpdb->prepare("
+            SELECT b.*
+            FROM $booking_table b
+            WHERE b.id = %d
+        ", $booking_id));
+        
+
+    if (!$booking_id || !$session_id || !$booking) {
+        wp_die('Invalid payment details.');
+    }
+
+    require_once 'vendor/autoload.php';
+    \Stripe\Stripe::setApiKey(get_option('stripe_secret'));
+
+    try {
+        $session = \Stripe\Checkout\Session::retrieve($session_id);
+        if ($session->payment_status === 'paid') {
+
+            // Insert transaction record
+            $wpdb->update(
+                $booking_table,
+                [
+                    'payment_status' => 'paid',
+                    'payment_id' => $session->payment_intent // Ensure 'payment_id' exists in your DB schema
+                ],
+                ['id' => $booking_id],
+                ['%s', '%s'],
+                ['%d']
+            );
+            
+            $booking = $wpdb->get_row($wpdb->prepare("
+                SELECT b.*
+                FROM $booking_table b
+                WHERE b.id = %d
+            ", $booking_id));
+        
+            send_admin_booking_notification($booking);
+            send_booking_status_email($booking);
+
+            wp_redirect(site_url("/appointment?status=paid&booking_id={$booking_id}"));
+            exit;
+        }
+    } catch (Exception $e) {
+        wp_die('Payment verification failed.');
+    }
 }
 

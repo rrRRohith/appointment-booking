@@ -5,11 +5,11 @@ if (!defined('ABSPATH')) {
 
 // Register settings with validation
 function appointment_booking_register_settings() {
-    register_setting('appointment_booking_group', 'appointment_amount', [
-        'sanitize_callback' => function ($input) {
-            return (is_numeric($input) && intval($input) >= 0) ? intval($input) : 0;
-        }
-    ]);
+    // register_setting('appointment_booking_group', 'appointment_amount', [
+    //     'sanitize_callback' => function ($input) {
+    //         return (is_numeric($input) && intval($input) >= 0) ? intval($input) : 0;
+    //     }
+    // ]);
 
     register_setting('appointment_booking_group', 'appointment_email', [
         'sanitize_callback' => function ($input) {
@@ -55,6 +55,24 @@ function appointment_booking_register_settings() {
     ]);
 
     register_setting('appointment_booking_group', 'ms_client_secret', [
+        'sanitize_callback' => function ($input) {
+            return sanitize_text_field($input);
+        }
+    ]);
+    
+    register_setting('appointment_booking_group', 'stripe_secret', [
+        'sanitize_callback' => function ($input) {
+            return sanitize_text_field($input);
+        }
+    ]);
+    
+    register_setting('appointment_booking_group', 'recaptcha_site_key', [
+        'sanitize_callback' => function ($input) {
+            return sanitize_text_field($input);
+        }
+    ]);
+    
+    register_setting('appointment_booking_group', 'recaptcha_secret_key', [
         'sanitize_callback' => function ($input) {
             return sanitize_text_field($input);
         }

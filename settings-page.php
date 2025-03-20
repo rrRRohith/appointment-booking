@@ -19,13 +19,13 @@ if (!defined('ABSPATH')) {
         do_settings_sections('appointment_booking_group');
         ?>
         <table class="form-table">
-            <tr valign="top">
-                <th scope="row">Amount <br> <small>Appointment booking amount</small></th>
-                <td>
-                    <span style="font-weight: bold;">$</span>
-                    <input required type="number" name="appointment_amount" value="<?php echo esc_attr(get_option('appointment_amount', '0')); ?>" min="0" step="1">
-                </td>
-            </tr>
+            <!--<tr valign="top">-->
+            <!--    <th scope="row">Amount <br> <small>Appointment booking amount</small></th>-->
+            <!--    <td>-->
+            <!--        <span style="font-weight: bold;">$</span>-->
+            <!--        <input required type="number" name="appointment_amount" value="<?php echo esc_attr(get_option('appointment_amount', '0')); ?>" min="0" step="1">-->
+            <!--    </td>-->
+            <!--</tr>-->
             <tr valign="top">
                 <th scope="row">Slot Duration <br> <small>Appointment booking duration</small></th>
                 <td>
@@ -89,6 +89,24 @@ if (!defined('ABSPATH')) {
                 <th scope="row">Microsoft Client Secret</th>
                 <td>
                     <input type="password" required name="ms_client_secret" value="<?php echo esc_attr(get_option('ms_client_secret', '')); ?>">
+                </td>
+            </tr>
+            <tr valign="top">
+                <th scope="row">Stripe Secret</th>
+                <td>
+                    <input type="password" required name="stripe_secret" value="<?php echo esc_attr(get_option('stripe_secret', '')); ?>">
+                </td>
+            </tr>
+            <tr valign="top">
+                <th scope="row">reCaptcha Site Key</th>
+                <td>
+                    <input type="password" required name="recaptcha_site_key" value="<?php echo esc_attr(get_option('recaptcha_site_key', '')); ?>">
+                </td>
+            </tr>
+            <tr valign="top">
+                <th scope="row">reCaptcha Secret Key</th>
+                <td>
+                    <input type="password" required name="recaptcha_secret_key" value="<?php echo esc_attr(get_option('recaptcha_secret_key', '')); ?>">
                 </td>
             </tr>
         </table>

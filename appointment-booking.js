@@ -14,10 +14,19 @@ jQuery(document).ready(function ($) {
                 nonce: appointmentBookingData.nonce, // Ensure nonce is sent
             },
             success: function (response) {
+                // if (response.success) {
+                //     $timeSelect.html('<option value="">Select a time slot</option>');
+                //     response.data.forEach((slot) => {
+                //         $timeSelect.append(`<option value="${slot}">${slot}</option>`);
+                //     });
+                //     $timeSelect.prop("disabled", false);
+                // } else {
+                //     $timeSelect.html('<option value="">No slots available</option>');
+                // }
                 if (response.success) {
                     $timeSelect.html('<option value="">Select a time slot</option>');
-                    response.data.forEach((slot) => {
-                        $timeSelect.append(`<option value="${slot}">${slot}</option>`);
+                    Object.entries(response.data).forEach(([value, text]) => {
+                        $timeSelect.append(`<option value="${value}">${text}</option>`);
                     });
                     $timeSelect.prop("disabled", false);
                 } else {
@@ -46,7 +55,12 @@ jQuery(document).ready(function ($) {
             success: function (response) {
                 let messageDiv = $("#appointment-message");
                 if (response.success) {
-                    messageDiv.html(`<p class="text-green-600 font-semibold">${response.data.message}</p>`);
+                    if (response.data.redirect_url) {
+                    window.location.href = response.data.redirect_url; // Redirect to Stripe
+                    } else {
+                        messageDiv.html(`<p class="text-green-600 font-semibold">${response.data.message}</p>`);
+                    }
+                    
                     $("#appointment-booking-form")[0].reset();
                 } else {
                     messageDiv.html(`<p class="text-red-600 font-semibold">${response.data.message}</p>`);
